@@ -41,18 +41,42 @@ object BostonCrimesMap {
     crimeDF.createOrReplaceTempView("crime")
     codesDF.createOrReplaceTempView("codes")
 
+    val crimesTotalX = spark.sql("SELECT distinct code from codes")
+
+    crimesTotalX.createOrReplaceTempView("codes1")
+
+
     val crimesTotal = spark.sql("SELECT /*+ BROADCAST (co) */ nvl(DISTRICT,'NA') as DISTRICT,COUNT(*) as CrimesTotal,avg(Lat) as Lat, avg(Long) as Long " +
-      "FROM crime cr inner join codes co on (cr.OFFENSE_CODE=co.CODE) group by DISTRICT")
+      "FROM crime cr inner join codes1 co on (cr.OFFENSE_CODE=co.CODE) group by nvl(DISTRICT,'NA') ")
 
     //crimesTotal.show()
+    crimesTotal.createOrReplaceTempView("crimesTotal")
+
+    crimesTotal.show()
+
+    val crimesTotal2 = spark.sql("SELECT sum(CrimesTotal) from crimesTotal")
+
+    crimesTotal2.show()
+
+    val crimesTotal1 = spark.sql("SELECT /*+ BROADCAST (co) */ COUNT(*) as CrimesTotal " +
+      "FROM crime cr inner join codes1 co on (cr.OFFENSE_CODE=co.CODE) ")
+
+    crimesTotal1.show()
 
     val crimesMonthly1 = spark.sql("SELECT count(*) as x,YEAR,MONTH, nvl(DISTRICT,'NA') as DISTRICT  FROM crime cr group by YEAR,MONTH,DISTRICT")
 
     //crimesMonthly1.show()
     crimesMonthly1.createOrReplaceTempView("crimesmonthly")
 
-    val crimesMonthly = spark.sql("SELECT percentile_approx(x,0.5) as CrimesMonthly, nvl(DISTRICT,'NA') as DISTRICT FROM crimesmonthly group by DISTRICT")
+    val crimesMonthly = spark.sql("SELECT percentile_approx(x,0.5) as CrimesMonthly, nvl(DISTRICT,'NA') as DISTRICT FROM crimesmonthly group by nvl(DISTRICT,'NA')")
     crimesMonthly.show()
+
+    crimesMonthly.createOrReplaceTempView("crimesmonthly1")
+
+    val crimesMonthly2 = spark.sql("SELECT sum(CrimesMonthly) FROM crimesmonthly1")
+    crimesMonthly2.show()
+
+
     //val res2DF = spark.sql("SELECT count(*), co.NAME,DISTRICT  FROM crime  cr inner join codes co on (cr.OFFENSE_CODE=co.CODE) group by NAME, DISTRICT order by count desc")
     val frequent_crime_types1  = spark.sql("SELECT /*+ BROADCAST (co) */ nvl(DISTRICT,'NA') as DISTRICT, split(co.NAME, ' - ')[0] NAME, COUNT(*) as CrimesbyNameDistrict " +
       "FROM crime cr inner join codes co on (cr.OFFENSE_CODE=co.CODE) group by nvl(DISTRICT,'NA'), split(co.NAME, ' - ')[0] order by DISTRICT, CrimesbyNameDistrict desc")
@@ -73,26 +97,7 @@ object BostonCrimesMap {
     frequent_crime_types.show(20,false)
 
     val res = crimesTotal.join(crimesMonthly,"DISTRICT").join(frequent_crime_types,"DISTRICT")
-    //res.show()
-
-    res.write.mode("overwrite").parquet(out + "/res.parquet")
-    //frequent_crime_types2.show()
-    /*
-    val crimes_total = crimeDF.select("DISTRICT")
-      .groupBy("DISTRICT").per
-      .agg(
-        count("*").alias("CrimesCountbyDistrict")
-      )
-*/
-    //resDF.show()
-    //res2DF.show()
-    //С помощью Spark соберите агрегат по районам (поле district) со следующими метриками:
-    //crimes_total - общее количество преступлений в этом районе
-
-
-    //   val pathCodes = "in/offense_codes.csv"
-    //   val codesDF = spark.read.json(pathCodes)
-
+    res.show()
 
   }
 }
